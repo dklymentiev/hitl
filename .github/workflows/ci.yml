@@ -1,0 +1,42 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install -r requirements.txt
+      - name: Every Python file compiles
+        run: python -m compileall -q server caller tools tests deploy
+      - name: Shared vectors, server and caller
+        run: python tests/vectors.py
+      - name: Shared vectors, web client
+        run: node tests/vectors.mjs
+      - name: A lying service against the caller, hostile clients against the service
+        run: python tests/hostile.py
+      - name: Release manifest matches the client files
+        run: python tools/release.py check
+      - name: Pre-publish scanner catches every planted kind
+        run: python tools/prepublish.py --self-test
+      - name: Nothing private in what would ship
+        run: python tools/prepublish.py
+      - name: The server starts and serves what the checkout holds
+        run: |
+          mkdir data
+          export HITL_ORIGIN=http://localhost:8080 HITL_DB=$PWD/data/hitl.sqlite
+          (cd server && gunicorn -c ../deploy/gunicorn.conf.py hitl.app:application) &
+          for i in $(seq 1 20); do curl -fs http://localhost:8080/ >/dev/null && break; sleep 0.5; done
+          python tools/verify_deployment.py http://localhost:8080 --repo .

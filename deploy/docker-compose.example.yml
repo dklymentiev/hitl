@@ -1,0 +1,17 @@
+# Example deployment behind a TLS-terminating reverse proxy.
+# The repository is mounted at /app; the SQLite database lives in ./data.
+services:
+  hitl:
+    build:
+      context: ./app
+      dockerfile: deploy/Dockerfile
+    image: hitl-python:main
+    container_name: hitl
+    restart: always
+    environment:
+      HITL_ORIGIN: "https://decide.example.com"   # must be the exact origin users open
+    volumes:
+      - ./app:/app:ro
+      - ./data:/var/hitl-data     # writable by www-data (uid 33)
+    ports:
+      - "127.0.0.1:8080:8080"

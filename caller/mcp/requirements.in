@@ -1,0 +1,7 @@
+# The MCP bridge: the caller library plus the MCP server. requirements.txt beside this file is the lock:
+#   pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file=caller/mcp/requirements.txt caller/mcp/requirements.in
+# mcp<2: the streamable HTTP API changed in 2.x
+mcp[cli]>=1.27,<2
+uvicorn
+PyNaCl>=1.5,<2
+cryptography>=41

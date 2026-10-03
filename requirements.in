@@ -1,0 +1,6 @@
+# Server, caller and tools. The caller alone needs only PyNaCl and cryptography.
+# These are the ranges; requirements.txt is the lock made from them, with hashes:
+#   pip-compile --allow-unsafe --generate-hashes --strip-extras --output-file=requirements.txt requirements.in
+PyNaCl>=1.5,<2
+cryptography>=41
+gunicorn>=23,<27

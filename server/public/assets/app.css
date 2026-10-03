@@ -1,0 +1,61 @@
+/* Neutral black and white by default. A caller can design the content, never this chrome. */
+body { font-family: system-ui, sans-serif; margin: 0; background: #fff; color: #111; }
+main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 1.4rem; }
+a { color: #111; }
+button { display: block; width: 100%; padding: 14px; margin: 12px 0; font-size: 1.05rem; border: 1px solid #111; border-radius: 6px; background: #111; color: #fff; cursor: pointer; }
+button.cancel, button.skip { background: #fff; color: #111; }
+button:disabled { background: #ccc; border-color: #ccc; color: #666; cursor: default; }
+input, textarea { display: block; width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px; font-size: 1rem; border: 1px solid #999; border-radius: 4px; }
+label { display: block; margin: 12px 0; }
+.caller { border: 2px solid #111; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+.caller .verified { display: inline-block; background: #111; color: #fff; border-radius: 3px; padding: 2px 8px; margin-right: 8px; font-size: 0.8rem; }
+.caller .domain { color: #555; }
+.banner { background: #f2f2f2; border-left: 4px solid #111; padding: 10px 12px; margin-bottom: 16px; }
+.text { white-space: pre-wrap; }
+.image { display: block; max-width: 100%; height: auto; margin: 12px 0; border: 1px solid #ddd; }
+figure { margin: 12px 0; }
+figcaption { color: #555; font-size: 0.9rem; }
+.pdf { margin: 12px 0; }
+video, audio { display: block; width: 100%; margin: 12px 0; background: #000; }
+audio { background: transparent; }
+.pdf-page { display: block; width: 100%; height: auto; margin: 8px 0; border: 1px solid #ddd; }
+.file { display: inline-block; padding: 8px 12px; border: 1px solid #111; border-radius: 4px; text-decoration: none; }
+label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+label.check input { width: auto; margin: 0; }
+.multi { margin-top: 6px; }
+select { display: block; width: 100%; padding: 10px; margin-top: 6px; font-size: 1rem; }
+.fragment { display: block; width: 100%; min-height: 60px; height: 240px; border: 1px solid #ccc; background: #fff; }
+.fingerprint { font-family: ui-monospace, monospace; font-size: 1.3rem; letter-spacing: 0.05em; background: #f2f2f2; padding: 12px; border-radius: 6px; }
+.note { color: #555; font-size: 0.9rem; }
+.settings { margin-top: 24px; }
+.queue { margin-top: 20px; }
+.inbox { margin: 16px 0; }
+.inbox-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #e5e5e5; }
+.inbox-row input { width: auto; margin-top: 4px; }
+.inbox-row p { margin: 2px 0 0; }
+.bulk { margin-top: 12px; }
+select.inline { display: inline-block; width: auto; padding: 4px; margin: 0; font-size: 0.9rem; }
+button.link { display: inline; width: auto; padding: 0; margin: 0; background: none; border: 0; color: #111; text-decoration: underline; font-size: 0.9rem; }
+.error { color: #b00020; font-weight: bold; }
+.review { margin: 20px 0; padding: 12px 16px; border: 2px solid #111; border-radius: 8px; background: #fafafa; }
+.review h2 { margin: 0 0 8px; font-size: 1rem; }
+.review p { margin: 4px 0; }
+
+/* Full layout: the caller's design fills the page between a slim top bar and a confirm bar. */
+body.full main { max-width: none; padding: 0 0 200px; }
+body.full .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 16px; border-bottom: 2px solid #111; background: #fff; font-size: 0.9rem; }
+body.full .topbar .caller { border: 0; padding: 0; margin: 0; }
+body.full .topbar .banner { background: none; border: 0; padding: 0; margin: 0; color: #555; }
+body.full .fragment { border: 0; }
+body.full .extra { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+.confirmbar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 2px solid #111; padding: 10px 16px; box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08); }
+.confirmbar .summary { margin: 0 0 8px; font-size: 0.95rem; }
+.confirmbar .choices-inline { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.confirmbar .choices-inline button { width: auto; margin: 0; padding: 8px 14px; font-size: 0.95rem; background: #fff; color: #111; }
+.confirmbar .choices-inline button.selected { background: #111; color: #fff; }
+.confirmbar #confirm { margin: 0; }
+.facts { margin-bottom: 16px; }
+.facts p { margin: 4px 0; }
+.devices { font-size: 1.1rem; }
+.settings .note { margin: 4px 0; }

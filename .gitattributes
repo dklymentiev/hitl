@@ -1,0 +1,6 @@
+# The client files are hashed into the release manifest: keep their bytes exact.
+server/public/assets/** -text
+# Shell scripts must keep LF whatever the checkout does.
+*.sh text eol=lf
+# Maintainer-only: never part of a release.
+internal/ export-ignore

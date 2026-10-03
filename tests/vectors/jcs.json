@@ -1,0 +1,62 @@
+{
+    "about": "Canonical JSON (RFC 8785) as hitl uses it: objects, lists, strings, integers, booleans, null. Every implementation must turn `value` into exactly `canonical`. The expected strings were written by hand from the RFC, not produced by any implementation here.",
+    "vectors": [
+        {
+            "name": "empty object",
+            "value": {},
+            "canonical": "{}"
+        },
+        {
+            "name": "empty list",
+            "value": [],
+            "canonical": "[]"
+        },
+        {
+            "name": "keys sorted, capitals first, no whitespace",
+            "value": {"b": 1, "a": 2, "aa": 3, "A": 4},
+            "canonical": "{\"A\":4,\"a\":2,\"aa\":3,\"b\":1}"
+        },
+        {
+            "name": "literals, negative and large integers, list order kept",
+            "value": {"z": [true, false, null], "n": -5, "big": 9007199254740991},
+            "canonical": "{\"big\":9007199254740991,\"n\":-5,\"z\":[true,false,null]}"
+        },
+        {
+            "name": "string escapes: quote, backslash, short escapes, \\u for other controls, non-ASCII as is",
+            "value": "a\"b\\c\n\t\u0001é€",
+            "canonical": "\"a\\\"b\\\\c\\n\\t\\u0001é€\""
+        },
+        {
+            "name": "slash, angle brackets and DEL are not escaped",
+            "value": "</script>\u007f",
+            "canonical": "\"</script>\u007f\""
+        },
+        {
+            "name": "keys sorted by UTF-16 code units, not code points",
+            "value": {"דּ": 3, "😀": 2, "€": 1},
+            "canonical": "{\"€\":1,\"😀\":2,\"דּ\":3}"
+        },
+        {
+            "name": "numeric-looking keys sort as strings",
+            "value": {"10": 1, "9": 2, "1": 3},
+            "canonical": "{\"1\":3,\"10\":1,\"9\":2}"
+        },
+        {
+            "name": "answer schema with an empty list of choices",
+            "value": {"fields": [{"type": "number", "name": "qty", "min": 1, "required": true}], "choices": []},
+            "canonical": "{\"choices\":[],\"fields\":[{\"min\":1,\"name\":\"qty\",\"required\":true,\"type\":\"number\"}]}"
+        },
+        {
+            "name": "a response record",
+            "value": {
+                "version": 1,
+                "request_id": "3f2b6c1e-8a4d-4e0b-9c57-1d2e3f4a5b6c",
+                "caller_id": "my-caller",
+                "caller_ref": "task:42",
+                "answer": {"choice": "A", "comment": ""},
+                "signed_at": "2026-01-02T03:04:05Z"
+            },
+            "canonical": "{\"answer\":{\"choice\":\"A\",\"comment\":\"\"},\"caller_id\":\"my-caller\",\"caller_ref\":\"task:42\",\"request_id\":\"3f2b6c1e-8a4d-4e0b-9c57-1d2e3f4a5b6c\",\"signed_at\":\"2026-01-02T03:04:05Z\",\"version\":1}"
+        }
+    ]
+}
