@@ -3752,6 +3752,48 @@
    }
   },
   {
+   "name": "cancel without a declared choice",
+   "schema": {
+    "choices": [
+     {
+      "value": "ok",
+      "label": "OK"
+     }
+    ]
+   },
+   "choice": "cancel",
+   "fields": null,
+   "comment": null,
+   "answer": {
+    "choice": "cancel"
+   }
+  },
+  {
+   "name": "cancel a form without choices",
+   "schema": {
+    "fields": [
+     {
+      "name": "qty",
+      "label": "Quantity",
+      "type": "number"
+     },
+     {
+      "name": "note",
+      "label": "Note",
+      "type": "text"
+     }
+    ]
+   },
+   "choice": "cancel",
+   "fields": {
+    "qty": 3
+   },
+   "comment": null,
+   "answer": {
+    "choice": "cancel"
+   }
+  },
+  {
    "name": "a comment cut to its limit",
    "schema": {
     "choices": [

@@ -70,7 +70,7 @@ Consequences to state up front:
 - **R6a Service-side idempotency.** Submitting the same signed response for the same request twice has one effect.
 - **R6b Caller-side single use.** A caller consumes a signed answer exactly once and refuses a replay. The service ships a caller library that does this.
 - **R7 Agnostic.** No coupling to any caller in API, format, schema or docs.
-- **R8 Caller authentication and identity display.** Every caller is registered and signs every request. The decision page shows, before the content and styled apart from it: a "verified caller" chip (display name and domain), and a banner saying this is a decision with consequences, not a message.
+- **R8 Caller authentication and identity display.** Every caller is registered and signs every request. The decision page shows the registered sender name before the content, with an optional operator-configured logo. Its domain and the decision warning remain available in Technical information.
 - **R9 Recipient key pinning.** A caller trusts a recipient's encryption key and credential keys only if it pinned them at onboarding or received them in a key statement signed by an already pinned credential. The caller library refuses any other key change.
 - **R10 Nothing on the service's word.** The client and the caller library treat every value the service returns as a claim to check: a key set against signed statements and the device's own anchor, an encryption public key against the private key it unwraps, and everything about a request (who asks, the reference, the policy, the deadline, the key the answer is sealed to) against the copy inside the sealed manifest. A value that cannot be checked is not used for a security decision.
 - **R11 A device signs only what the page computed.** Every challenge a credential signs is the hash of an object the page built itself, never a value supplied by the service. Every signed object carries a `type`, and every verifier requires exactly the fields of that type, no more and no fewer, so a signature over one kind of object can never pass as another.
@@ -179,7 +179,7 @@ After an answer the page offers the next pending request, with the number left; 
 
 ## Callers
 
-A caller record: `caller_id`, `display_name`, `display_domain`, `verified_since`, `caller_pubkey` (Ed25519). v1 registers callers manually by the operator of the deployment. The service verifies the caller signature before minting a request.
+A caller record: `caller_id`, `display_name`, `display_domain`, `verified_since`, `caller_pubkey` (Ed25519), and optional operator-controlled outer-shell theme (bounded hex colors and a PNG/JPEG/WebP logo). v1 registers callers manually by the operator of the deployment. The service verifies the caller signature before minting a request. The theme is service metadata, not part of the signed request or answer; it cannot change what the caller accepts.
 
 ## Recipient keys
 
@@ -281,19 +281,19 @@ Content blocks, rendered in order in the recipient's browser after decryption:
 
 Large attachments (above about 2 MB, and all video and audio) travel as blobs. The caller encrypts the file in 64 KiB chunks with libsodium secretstream under a fresh random key and uploads the ciphertext with `PUT /api/v1/blobs`, signing a header `{type: "hitl.blob", version: 2, caller_id, sha256, size, created_at}` (sha256 of the ciphertext). The payload entry carries the blob id, ciphertext hash and size, the key and the stream header, so only the recipient can decrypt it, and the ciphertext hash is covered by the payload hash in the signed record. The creation body lists the blob ids; a blob becomes downloadable (`GET /api/v1/blobs/{id}`) only once a signed request claims it, and only by one request. The page refuses a blob whose ciphertext hash does not match the payload. Deployment limit `HITL_MAX_BLOB_BYTES` (default 250 MB).
 
-Page design. By default the page is plain black and white. A caller can set `"layout": "full"` in the manifest to make its HTML block the whole page (a dashboard, a gallery, a designed document), between a slim service bar at the top (verified caller, banner) and the service's confirm bar at the bottom. The design answers through ordinary controls, still without scripts:
+Page design. The service has a restrained default visual theme. Its operator can register colors and a logo for each caller's outer shell. A caller can set `"layout": "full"` in the manifest to make its HTML block the whole page (a dashboard, a gallery, a designed document), between a slim service bar at the top (registered sender name, optional logo and technical disclosure) and the service's confirm bar at the bottom. The design answers through ordinary controls, still without scripts:
 
 - `data-hitl-field="<field>"` on inputs (radio, checkbox, select, text, number, date, textarea) binds them to schema fields; a radio group styled as a picture grid becomes an image selector.
 - `data-hitl-choice="<value>"` on any element (or on a radio input) makes it an answer option; the selected element gets the class `hitl-selected` for styling.
 - `src="hitl:<ref>"` and `poster="hitl:<ref>"` show encrypted attachments (images, video, audio) inside the design.
 
-The confirm bar shows exactly what will be signed (the chosen option and every field value, with option labels) and stays disabled until the answer fits the schema. Fields and choices the design does not provide are offered by the service below the design. Designs cannot style the service bar or the confirm bar.
+The confirm bar has two actions: Cancel and a confirmation button labelled with the selected choice when its label is short enough. It does not repeat the choice or field values above the buttons, and confirmation stays disabled until the answer fits the schema. Cancel signs an explicit `cancel` answer without fields, even when the caller did not list it. Fields and choices the design does not provide are offered by the service below the design, where long lists can scroll without growing the fixed confirm bar. Request HTML cannot style the service bar or the confirm bar; only the operator's registered theme affects them. The service keeps caller ID, registered domain and request facts behind a small information icon labelled “Technical information” for assistive technology; the sender's registered name stays visible above the content. Answered pages offer Close, with a reminder when the browser keeps the tab open.
 
 Office documents are best converted to PDF by the caller before sending; in-browser rendering of DOCX, XLSX and PPTX is future work.
 
 Answer schema (`answers`), at least one of `choices` and `fields`:
 
-- `choices`: buttons `{value, label}` with unique values. Without choices the page shows a single Submit button and the answer has no `choice`.
+- `choices`: buttons `{value, label}` with unique values. Without choices the page shows Submit and Cancel; Submit has no `choice`, while Cancel has `choice: "cancel"`.
 - `fields`: form fields `{name, label, type, required?}`; types `text` and `textarea` (`max_length`), `number` (whole numbers of magnitude at most 2^53 - 1, `min`, `max`), `date` (YYYY-MM-DD), `select` and `multiselect` (`options: [{value, label}]`), `checkbox` (boolean; a required checkbox must be ticked).
 - `comment`: optional free text `{max_length}`.
 

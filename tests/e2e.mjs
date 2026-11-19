@@ -130,7 +130,7 @@ try {
   // Decision.
   await page.goto(ask.link, { waitUntil: 'networkidle0' });
   const chip = await page.$eval('#caller', e => e.textContent);
-  check('caller chip shown', chip.includes('E2E Caller') && chip.includes('e2e.example'));
+  check('requester named above the content', chip.includes('Asked by') && chip.includes('E2E Caller'));
 
   // A service that lies about the request. Each lie changes one thing in what the service presents;
   // the page compares it with the facts sealed in the manifest and must refuse, showing nothing to answer.
@@ -188,11 +188,15 @@ try {
   check('payload decrypted in the browser', title === 'Send the weekly report?', title);
   const shownRef = await page.$eval('#caller-ref', e => e.textContent).catch(() => '');
   check('the caller reference is shown from the sealed manifest', shownRef.includes('task:42'), shownRef);
+  const senderDetails = await page.$eval('.technical-content', e => e.textContent).catch(() => '');
+  check('registered sender identity is available in details', senderDetails.includes(callerId) && senderDetails.includes('e2e.example'));
   const shownFp = await page.$eval('#key-fingerprint', e => e.textContent).catch(() => '');
   check('an unlocked page shows the fingerprint, computed from the chain the device verified', shownFp.includes(pageFp), shownFp);
   await page.type('#comment', 'Looks fine.');
   await page.click('button[data-choice="A"]');
   await page.waitForSelector('#done, #error', { timeout: 20000 });
+  check('signed answer shows a decision receipt with Close',
+    !!(await page.$('.receipt-page #done')) && !!(await page.$('.receipt-choice')) && !!(await page.$('#close')));
   const signErr = await page.$eval('#error', e => e.textContent).catch(() => null);
   check('answer signed', !signErr, signErr || '');
 
@@ -344,9 +348,14 @@ try {
   await designFrame.click('#ph2');
   await designFrame.click('#use');
   await page.waitForFunction(() => !document.querySelector('#confirm').disabled, { timeout: 5000 }).catch(() => {});
-  const summaryText = await page.$eval('#summary', e => e.textContent);
+  const actions = await page.$$eval('.confirmbar .confirm-actions button', buttons =>
+    buttons.map(button => ({ id: button.id, text: button.textContent.trim(), icon: !!button.querySelector('.action-icon') })));
   const unboundOffered = !!(await page.$('#field-notes'));
-  check('confirm bar shows exactly what will be signed', disabledBefore && /Use this photo/.test(summaryText) && /Photo 2/.test(summaryText), summaryText);
+  check('confirm bar has two labelled actions without a duplicate answer summary',
+    disabledBefore && actions.length === 2 && actions[0].id === 'cancel' && actions[0].icon
+      && actions[1].id === 'confirm' && actions[1].icon && /Use this photo/.test(actions[1].text)
+      && !(await page.$('#summary')) && !(await page.$('.confirmbar .fallback-choices')),
+    JSON.stringify(actions));
   check('fields the design leaves out are offered by the service', unboundOffered);
   await page.click('#confirm');
   await page.waitForSelector('#done, #error', { timeout: 20000 });
@@ -400,10 +409,9 @@ try {
   await page.goto(noReview.link, { waitUntil: 'networkidle0' });
   await page.click('#unlock');
   await page.waitForSelector('button[data-choice="A"]', { timeout: 20000 });
-  const speech = await page.evaluate(() => !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   const dictateButtons = (await page.$$('.dictate')).length;
-  check('a Dictate button beside the comment where the browser has speech recognition', dictateButtons === (speech ? 1 : 0),
-    `speech ${speech}, buttons ${dictateButtons}`);
+  check('decision form has no Dictate button', dictateButtons === 0,
+    `buttons ${dictateButtons}`);
   await page.click('button[data-choice="A"]');
   await page.waitForSelector('#done, #error', { timeout: 20000 });
   await page.goto(withReview.link, { waitUntil: 'networkidle0' });
@@ -418,6 +426,8 @@ try {
   await page.goto(noReview.link, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#done', { timeout: 20000 });
   check('an answered link without review only says it was answered', !(await page.$('#show-answer')) && !(await page.$('#review')));
+  check('answered link uses the receipt layout and offers Close',
+    !!(await page.$('.receipt-page #done')) && !!(await page.$('#close')));
   await page.goto(withReview.link, { waitUntil: 'networkidle0' });
   const offered = await page.waitForSelector('#show-answer', { timeout: 20000 }).then(() => true, () => false);
   check('an answered link with review offers to show the answer', offered);
@@ -524,7 +534,7 @@ try {
   check('skip moves to another request', secondInQueue !== firstInQueue, `${firstInQueue} -> ${secondInQueue}`);
   await page.click('button[data-choice="A"]');
   const backText = await page.waitForSelector('#back-to-skipped', { timeout: 10000 }).then(h => h.evaluate(e => e.textContent), () => '');
-  check('skipped request comes back at the end', /Back to skipped \(1\)/.test(backText), backText);
+  check('skipped request comes back at the end', /1 skipped/.test(backText) && /Return to skipped decisions/.test(backText), backText);
   await page.goto(`${HITL_URL}/inbox`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#inbox input[type=checkbox]', { timeout: 20000 });
   const inboxRows = await page.$$eval('#inbox a', as => as.map(a => a.textContent));

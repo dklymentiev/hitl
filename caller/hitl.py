@@ -496,7 +496,10 @@ def answer_problem(answer: object, schema: dict) -> str | None:
     if any(k not in ("choice", "fields", "comment") for k in answer):
         return "schema_mismatch"
     choices = _values(schema.get("choices"))
-    if (not strict_in(answer.get("choice"), choices)) if choices else ("choice" in answer):
+    # A person can cancel any request, including one whose caller did not
+    # declare that choice. The page signs this explicit answer.
+    cancel = strict_eq(answer.get("choice"), "cancel")
+    if not cancel and ((not strict_in(answer.get("choice"), choices)) if choices else ("choice" in answer)):
         return "schema_mismatch"
     if "comment" in answer:
         c = schema.get("comment")
@@ -504,7 +507,7 @@ def answer_problem(answer: object, schema: dict) -> str | None:
         if not c or not isinstance(answer["comment"], str) or len(answer["comment"]) > (limit if is_int(limit) else 0):
             return "schema_mismatch"
     fields = _list(schema.get("fields"))
-    if not fields or strict_eq(answer.get("choice"), "cancel"):
+    if not fields or cancel:
         return "schema_mismatch" if "fields" in answer else None
     given = answer.get("fields")
     if not isinstance(given, dict):
@@ -710,7 +713,7 @@ def verify(request_id: str) -> tuple[str, dict | None, dict | None, dict | None]
 def answered_output(request_id: str, local: dict, record: dict, assertion: dict, answer: dict) -> dict:
     schema = json.loads(unb64u(local["manifest"]))["answers"]
     choice = answer.get("choice")
-    label = "Submitted" if choice is None else ""
+    label = "Submitted" if choice is None else "Cancel" if strict_eq(choice, "cancel") else ""
     for c in _list(schema.get("choices")):
         if strict_eq(c.get("value"), choice):
             label = c["label"]

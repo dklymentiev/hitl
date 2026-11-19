@@ -1,9 +1,10 @@
--- hitl storage, schema version 2 (PRAGMA user_version). Applied on every connection; all statements are idempotent.
+-- hitl storage, schema version 3 (PRAGMA user_version). Applied on every connection; all statements are idempotent.
 
 CREATE TABLE IF NOT EXISTS callers (
     id             TEXT PRIMARY KEY,
     display_name   TEXT NOT NULL,
     display_domain TEXT NOT NULL,
+    theme          TEXT NOT NULL DEFAULT '{}', -- operator-approved outer shell colors and optional logo
     pubkey         TEXT NOT NULL,          -- Ed25519, base64url
     verified_since TEXT NOT NULL
 );

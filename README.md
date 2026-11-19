@@ -74,10 +74,19 @@ Operator tasks:
 
 ```
 python server/bin/admin.py add-caller <caller_id> <display_name> <display_domain> <pubkey>
+python server/bin/admin.py set-caller-theme <caller_id> colors.json [logo.png]
 python server/bin/admin.py enrol-link <recipient_id> <display_name>
 python server/bin/admin.py reset-recipient <recipient_id>      # recovery when no device survives
 python server/bin/admin.py list
 ```
+
+An operator may set a separate outer-shell theme for each registered caller. `colors.json` accepts six-digit hex values for `background`, `surface`, `ink`, `muted`, `border`, `accent`, and `on_accent`; every key is optional. The optional logo must be PNG, JPEG or WebP, at most 64 KiB. For example:
+
+```json
+{"background":"#fafaf8","surface":"#ffffff","ink":"#101114","muted":"#76767a","border":"#e7e6e1","accent":"#101114","on_accent":"#ffffff"}
+```
+
+The service validates color contrast and applies the theme to its header, page background, controls and confirmation bar. The logo appears beside the registered caller's name. This theme is operator-controlled metadata; a request cannot style the outer shell. Caller HTML remains inside its sandboxed frame. Use an empty JSON object without a logo file to restore the defaults.
 
 ## Caller CLI
 
@@ -100,7 +109,8 @@ python caller/hitl.py consume <request_id>                                      
 
 `--review` puts `"review": true` in the signed request policy: the page then seals a second copy of the answer to the recipient's own key, and after answering the recipient can open the link again, unlock it, and see the request with their answer, read-only. Without it an answered link only says it was answered. The flag is visible to the service (the policy is not encrypted) but signed by the caller and repeated inside the sealed manifest, so the service cannot turn it on.
 
-Every free-text field on the decision page, including textareas in a full-layout design, has a Dictate button where the browser offers speech recognition (Web Speech API). The page sends nothing for it; the browser's own speech service hears the audio (Google in Chrome, Apple in Safari), and the button's tooltip says so. Browsers without the API show no button.
+Free-text fields use typed input. The decision page does not request microphone access or offer browser speech recognition.
+The page always offers Cancel beside Confirm. Cancel signs an explicit `cancel` answer and leaves form fields out, even when the caller did not list cancel in its choices. The registered sender name is visible above the content, with its operator-configured logo when present. Caller ID, registered domain, reference, expiry and confirmation policy are available from the small information icon in the header (labelled “Technical information” for assistive technology). Answered pages offer Close; browsers that forbid script-closing a manually opened tab show a reminder to close it. The service's outer-shell theme does not alter caller-designed content.
 
 ## MCP bridge
 

@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 SCHEMA = os.path.join(os.path.dirname(__file__), "..", "schema.sql")
-DB_VERSION = 2
+DB_VERSION = 3
 
 
 class HttpError(Exception):
@@ -87,10 +87,19 @@ def db() -> sqlite3.Connection:
         # form this code cannot verify. Reading it as if it were current would be worse than stopping.
         raise RuntimeError("the database at HITL_DB predates protocol version 2: start with a new file, "
                            "register the callers and have every recipient enrol again")
-    if version not in (0, DB_VERSION):
+    if version not in (0, 2, DB_VERSION):
         raise RuntimeError(f"the database at HITL_DB has schema version {version}, this code needs {DB_VERSION}")
     with open(SCHEMA, encoding="utf-8") as f:
         conn.executescript(f.read())
+    if version == 2:
+        # A theme changes only the service-owned chrome. It does not alter any signed object.
+        # Check the column as well as user_version so a stopped migration can resume safely.
+        if "theme" not in {r[1] for r in conn.execute("PRAGMA table_info(callers)")}:
+            try:
+                conn.execute("ALTER TABLE callers ADD COLUMN theme TEXT NOT NULL DEFAULT '{}' ")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
     conn.execute(f"PRAGMA user_version = {DB_VERSION}")
     _local.conn = conn
     return conn

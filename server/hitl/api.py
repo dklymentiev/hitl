@@ -534,7 +534,8 @@ def request_get(req: Request, key: str) -> Response:
     if key == r["short"] and r["opened_at"] is None:
         q("UPDATE requests SET opened_at = ? WHERE id = ? AND opened_at IS NULL", (now(), r["id"]))
         event("hitl.request.opened", r["id"], r["caller_id"], {"ua_hash": b64u(sha256(req.header("User-Agent").encode()))})
-    caller = one("SELECT id, display_name, display_domain, verified_since FROM callers WHERE id = ?", (r["caller_id"],))
+    caller = one("SELECT id, display_name, display_domain, verified_since, theme FROM callers WHERE id = ?", (r["caller_id"],))
+    caller["theme"] = json.loads(caller["theme"] or "{}")
     recipient = one("SELECT id, display_name, enc_pubkey, epoch FROM recipients WHERE id = ?", (r["recipient_id"],))
     return json_out({
         "request_id": r["id"],

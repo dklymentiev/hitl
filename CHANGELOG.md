@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-19
+
+- Removed the Dictate control and browser speech-recognition access from decision forms: the button was not needed.
+- Added an explicit signed Cancel action to every request, including requests whose answer schema did not list cancel.
+- Shows the registered sender name above the document; caller ID, domain, reference, expiry and device policy remain in Technical information.
+- Adds Close after signing and on answered links, and centers equal-sized confirmation buttons in a compact desktop container.
+- Uses a restrained default visual theme for the service chrome; each caller still owns the content design.
+- Lets the operator configure bounded outer-shell colors and a logo per registered caller, while request HTML stays isolated.
+- Replaced the visible Technical information label with a compact, accessible information icon.
+- Keeps the fixed confirmation bar to two icon-labelled actions, moves fallback choice lists into the scrolling page, and removes its mobile corner rounding.
+- Softens shell dividers and control outlines, narrows the action bar, and replaces the solid gray disabled confirmation with a light, neutral state.
+- Replaces the plain signed-answer page with a compact decision receipt and a clear next-request action; answered links use the same layout.
+
 ## [0.1.0] - 2026-10-03
 
 First public release. Early and unaudited: read SECURITY.md before relying on it.

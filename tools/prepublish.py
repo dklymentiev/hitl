@@ -46,7 +46,8 @@ GENERIC = {
     "ip_address": re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])"),
     "home_folder": re.compile(r"(?:[A-Za-z]:\\+Users\\+[^\\\s<>\"']+|/home/[a-z_][a-z0-9_-]+|/Users/[A-Za-z][\w.-]+)"),
     "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\b"),
-    "tracker_ref": re.compile(r"(?:\b(?:issue|task|ticket|bug|backlog item|MR|PR|ADR)s?[ -]?[#!]?\d+\b|(?<![\w&#:/])[#!]\d{4,6}\b)", re.I),
+    # A quoted six-digit CSS color is not a bare tracker reference.
+    "tracker_ref": re.compile(r"(?:\b(?:issue|task|ticket|bug|backlog item|MR|PR|ADR)s?[ -]?[#!]?\d+\b|(?<![\w&#:/\"'])[#!]\d{4,6}\b)", re.I),
     "placeholder": re.compile(r"(?:TODO-REPLACE|\{\{\s*\w+\s*\}\}|<[A-Z]+_NAME>)"),
 }
 SECRET = {
@@ -166,7 +167,8 @@ PLANTED = {
     "private_name (vendored)": b"/* zorblatt */ var a=1;\n",
 }
 CLEAN = (b"HITL_ORIGIN: https://decide.example.com\nbind 0.0.0.0:8080, proxy at 127.0.0.1, docs use 192.0.2.7\n"
-         b"color: #111; border: 1px solid #555; mail alice@example.com; pdfjs-dist 6.3.289\n")
+         b"color: #111; border: 1px solid #555; mail alice@example.com; pdfjs-dist 6.3.289\n"
+         b'{"ink":"#101114","accent":"#101114"}\n')
 
 
 def self_test() -> int:

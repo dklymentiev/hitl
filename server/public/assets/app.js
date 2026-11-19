@@ -219,12 +219,17 @@ async function replayFromAnchor(recipientId, encPubkey, anchor, items, origin, r
 // fields and the choice is not cancel, even if none was filled in; a comment only when one was written.
 function shapeAnswer(schema, choice, fields, comment) {
   const answer = {};
-  if ((schema.choices || []).length) answer.choice = choice;
+  if ((schema.choices || []).length || choice === 'cancel') answer.choice = choice;
   if (answer.choice !== 'cancel' && (schema.fields || []).length) answer.fields = fields || {};
   if (schema.comment && typeof comment === 'string' && comment.trim() !== '') {
     answer.comment = comment.trim().slice(0, schema.comment.max_length);
   }
   return answer;
+}
+
+const CANCEL = { value: 'cancel', label: 'Cancel' };
+function withCancel(choices) {
+  return choices.some(c => c.value === 'cancel') ? choices : [...choices, CANCEL];
 }
 
 // ---- end: protocol helpers
@@ -633,6 +638,20 @@ async function enrol(token, info, label) {
 
 const unsentKey = (id) => 'hitl.unsent.' + id;
 
+// The service operator configures each registered caller's outer chrome. Caller HTML stays
+// inside its frame and cannot set these values. Accept only bounded colors and image data.
+function applyCallerTheme(caller) {
+  const theme = caller.theme && typeof caller.theme === 'object' ? caller.theme : {};
+  for (const key of ['background', 'surface', 'ink', 'muted', 'border', 'accent', 'on_accent']) {
+    const value = theme[key];
+    if (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) {
+      document.documentElement.style.setProperty('--hitl-' + key.replace('_', '-'), value);
+    }
+  }
+  return typeof theme.logo === 'string' && theme.logo.length < 90000
+    && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(theme.logo) ? theme.logo : null;
+}
+
 // A record this tab built and signed but could not deliver. It is sent again as the same bytes,
 // so the service sees one answer however often it arrives. True when it was delivered. It is kept
 // while the service cannot be reached or fails, and dropped only when the service refuses it.
@@ -655,10 +674,15 @@ async function decidePage(short) {
   // A record this page built and could not deliver is sent again as the same bytes, so the
   // service sees one answer however often it arrives.
   if (req.status === 'pending' && await resendUnsent(req.request_id)) req = await api('GET', '/api/v1/requests/' + short);
-  // The chip is the service's statement: "this service says the request is from this caller".
+  const logo = applyCallerTheme(req.caller);
+  // The visible name comes from the service's caller registry. The caller ID is checked against
+  // the sealed request facts after unlock and remains available in Technical information.
   const chip = el('div', { class: 'caller', id: 'caller' },
-    el('span', { class: 'verified' }, 'Verified caller'),
-    el('strong', {}, req.caller.display_name), ' ', el('span', { class: 'domain' }, req.caller.display_domain));
+    el('span', { class: 'caller-avatar', 'aria-hidden': 'true' },
+      logo ? el('img', { class: 'caller-logo', src: logo, alt: '' }) : req.caller.display_name.slice(0, 1).toUpperCase()),
+    el('span', { class: 'caller-copy' },
+      el('span', { class: 'caller-label' }, 'Asked by'),
+      el('strong', {}, req.caller.display_name)));
   const banner = el('div', { class: 'banner' }, 'This is a decision with consequences, not a message. Read it before you answer.');
   localStorage.setItem('hitl.recipient', req.recipient.id);
   if (req.status === 'signed') return answeredPage(req, chip);
@@ -741,6 +765,44 @@ function factsBox(ctx) {
   return box;
 }
 
+// Keep the registered sender details and signed request facts available without making
+// them compete with the question. This disclosure lives outside caller HTML.
+function technicalDetails(ctx, banner) {
+  return el('details', { class: 'technical' },
+    el('summary', { 'aria-label': 'Technical information', title: 'Technical information' },
+      el('span', { class: 'technical-icon', 'aria-hidden': 'true' }, 'i')),
+    el('div', { class: 'technical-content' },
+      el('p', {}, 'Registered sender: ', el('strong', {}, ctx.req.caller.display_name)),
+      el('p', {}, 'Caller ID: ', el('code', {}, ctx.req.caller.id)),
+      el('p', {}, 'Registered domain: ', el('strong', {}, ctx.req.caller.display_domain)),
+      banner,
+      ctx.manifest.title ? el('p', {}, 'Request: ', el('strong', {}, ctx.manifest.title)) : '',
+      factsBox(ctx)));
+}
+
+function requestHeader(ctx, chip, banner) {
+  return el('div', { class: 'topbar' },
+    el('div', { class: 'topbar-inner' }, chip, technicalDetails(ctx, banner)));
+}
+
+function closeControl() {
+  const note = el('p', { class: 'note', id: 'close-note' });
+  const button = el('button', { id: 'close', class: 'cancel', onclick: () => {
+    window.close();
+    setTimeout(() => { note.textContent = 'Your browser keeps this tab open. You can close it now.'; }, 300);
+  } }, 'Close');
+  return el('div', { class: 'close-control' }, button, note);
+}
+
+function receiptMark() {
+  const mark = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [name, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) mark.setAttribute(name, value);
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M20 6 9 17l-5-5');
+  mark.append(path);
+  return el('div', { class: 'receipt-mark', 'aria-hidden': 'true' }, mark);
+}
+
 // ---------------------------------------------------------------- an answered request
 //
 // The caller's policy decides whether an answered link can be opened again ("review"). If so, the
@@ -751,8 +813,15 @@ function factsBox(ctx) {
 
 async function answeredPage(req, chip) {
   const next = await nextControls(req.recipient.id, req.request_id);
-  const done = el('p', { id: 'done' }, 'This request has already been answered.');
-  if (!((req.creation_body || {}).policy || {}).review || !req.response) return show(chip, done, next);
+  const present = (reviewAction = '') => {
+    document.body.classList.remove('full');
+    show(el('section', { class: 'receipt-page', 'aria-labelledby': 'done' },
+      el('div', { class: 'receipt' }, receiptMark(),
+        el('h1', { id: 'done' }, 'Already answered'),
+        el('p', { class: 'receipt-copy' }, 'This decision has already been signed.'),
+        reviewAction, next, closeControl())));
+  };
+  if (!((req.creation_body || {}).policy || {}).review || !req.response) return present();
   await sodium.ready;
   const open = (k) => renderReview(req, chip, k, next);
   const s = await usableSession(req, null);
@@ -764,16 +833,14 @@ async function answeredPage(req, chip) {
       if (!(e instanceof Undecryptable)) throw e;
     }
   }
-  show(chip, done,
-    el('button', { id: 'show-answer', onclick: () => unlockWithDevice(req).then(open).catch(fail) }, 'Show the request and my answer'),
-    next);
+  present(el('button', { id: 'show-answer', onclick: () => unlockWithDevice(req).then(open).catch(fail) }, 'Show the request and my answer'));
 }
 
 function answerLines(schema, answer) {
   const lines = [];
   if (answer.choice !== undefined) {
     const c = (schema.choices || []).find(x => x.value === answer.choice);
-    lines.push('You chose: ' + (c ? c.label : answer.choice));
+    lines.push('You chose: ' + (c ? c.label : answer.choice === 'cancel' ? CANCEL.label : answer.choice));
   }
   for (const f of schema.fields || []) {
     const v = (answer.fields || {})[f.name];
@@ -859,10 +926,11 @@ async function renderReview(req, chip, key, next) {
       + '. This page only shows the answer; it cannot be changed.'));
   if (manifest.layout === 'full') {
     document.body.classList.add('full');
-    const top = el('div', { class: 'topbar' }, chip, manifest.title ? el('strong', { id: 'title' }, manifest.title) : '');
-    return show(top, ...content, el('div', { class: 'extra' }, box, next));
+    const top = requestHeader(ctx, chip, '');
+    return show(top, ...content, el('div', { class: 'extra' }, box, closeControl(), next));
   }
-  show(chip, manifest.title ? el('h1', { id: 'title' }, manifest.title) : '', ...content, box, next);
+  show(requestHeader(ctx, chip, ''), manifest.title ? el('h1', { id: 'title' }, manifest.title) : '',
+    ...content, box, closeControl(), next);
 }
 
 // ---------------------------------------------------------------- content blocks
@@ -1039,54 +1107,8 @@ function renderBlock(b, payload) {
 }
 
 // ---------------------------------------------------------------- dictation
-//
-// A "Dictate" button beside every free-text field: the browser's speech recognition (Web Speech
-// API) types what the person says. The page sends nothing itself; the browser's speech service
-// hears the audio (Chrome: Google, Safari: Apple), so the button says so. Browsers without the API
-// get no button. Works for the service's own fields and for textareas in a full-layout design.
-
-const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-const DICTATE_STYLE = 'display:inline-block;width:auto;margin:6px 0 0;padding:6px 14px;border:1px solid #888;'
-  + 'border-radius:16px;background:#fff;color:#111;font:inherit;font-size:13px;cursor:pointer';
-
-function dictateButton(field, doc = document) {
-  if (!Speech) return '';
-  const b = doc.createElement('button');
-  b.type = 'button';
-  b.className = 'dictate';
-  b.textContent = 'Dictate';
-  b.title = "Speak instead of typing. Your browser's speech service turns it into text.";
-  b.setAttribute('style', DICTATE_STYLE);
-  let rec = null;
-  b.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (rec) { rec.stop(); return; }
-    rec = new Speech();
-    rec.lang = navigator.language || 'en-US';
-    rec.continuous = true;
-    rec.interimResults = true;
-    const base = field.value.trim() ? field.value.replace(/\s*$/, ' ') : '';
-    let finals = '';
-    rec.onresult = (ev) => {
-      let interim = '';
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        if (ev.results[i].isFinal) finals += ev.results[i][0].transcript;
-        else interim += ev.results[i][0].transcript;
-      }
-      const text = base + finals + interim;
-      field.value = field.maxLength > 0 ? text.slice(0, field.maxLength) : text;
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    rec.onerror = (ev) => { b.title = 'Dictation stopped: ' + ev.error; };
-    rec.onend = () => { rec = null; b.textContent = 'Dictate'; b.style.background = '#fff'; b.style.color = '#111'; };
-    rec.start();
-    b.textContent = 'Stop dictation';
-    b.style.background = '#111';
-    b.style.color = '#fff';
-  });
-  return b;
-}
+// No voice input: keep call sites unchanged while removing browser speech access.
+function dictateButton() { return ''; }
 
 // ---------------------------------------------------------------- answer form
 
@@ -1159,7 +1181,7 @@ async function render(req, chip, banner, key) {
   const schema = manifest.answers;
   if (manifest.layout === 'full') return renderFull(ctx, chip, banner);
 
-  const content = [factsBox(ctx)];
+  const content = [];
   if (manifest.title) content.push(el('h1', { id: 'title' }, manifest.title));
   for (const b of blocksOf(manifest)) content.push(renderBlock(b, payload));
   const form = renderForm(schema);
@@ -1169,7 +1191,7 @@ async function render(req, chip, banner, key) {
     comment = el('textarea', { id: 'comment', maxlength: String(schema.comment.max_length), rows: '3' });
     content.push(el('label', {}, 'Comment (optional)', comment, dictateButton(comment)));
   }
-  const choices = schema.choices && schema.choices.length ? schema.choices : [{ value: null, label: 'Submit' }];
+  const choices = withCancel(schema.choices && schema.choices.length ? schema.choices : [{ value: null, label: 'Submit' }]);
   const submit = async (c) => {
     const fields = c.value !== 'cancel' && (schema.fields || []).length ? form.read() : null;
     await sign(ctx, shapeAnswer(schema, c.value, fields, comment && comment.value), c.label);
@@ -1182,7 +1204,8 @@ async function render(req, chip, banner, key) {
   if (new URLSearchParams(location.search).has('queue')) {
     buttons.push(el('button', { class: 'choice skip', id: 'skip', onclick: () => skipAndGo(req).catch(fail) }, 'Skip for now'));
   }
-  show(chip, banner, ...content, el('div', { class: 'choices' }, ...buttons), sessionSettings(req, key.keys));
+  show(requestHeader(ctx, chip, banner), ...content,
+    el('div', { class: 'choices' }, ...buttons), sessionSettings(req, key.keys));
 }
 
 // ---------------------------------------------------------------- designed pages (layout "full")
@@ -1196,8 +1219,8 @@ async function render(req, chip, banner, key) {
 // The same rules the caller applies, so the person sees a problem before signing.
 function answerProblem(schema, answer) {
   const choices = (schema.choices || []).map(c => c.value);
-  if (choices.length && !choices.includes(answer.choice)) return 'Choose one of the options.';
   if (answer.choice === 'cancel') return null;
+  if (choices.length && !choices.includes(answer.choice)) return 'Choose one of the options.';
   for (const f of schema.fields || []) {
     const v = (answer.fields || {})[f.name];
     const missing = v === undefined || v === '' || (Array.isArray(v) && !v.length) || (f.type === 'checkbox' && v !== true && f.required);
@@ -1295,6 +1318,7 @@ function renderFull(ctx, chip, banner) {
   const schema = manifest.answers;
   const state = { choice: null };
   const choices = schema.choices || [];
+  const labelled = withCancel(choices);
   const frames = [];
   const content = [];
   for (const b of blocksOf(manifest)) {
@@ -1302,11 +1326,28 @@ function renderFull(ctx, chip, banner) {
     if (node.tagName === 'IFRAME') frames.push(node);
     content.push(node);
   }
-  const summary = el('p', { class: 'summary', id: 'summary' });
-  const confirm = el('button', { id: 'confirm', disabled: '' }, 'Confirm');
-  const inline = el('div', { class: 'choices-inline' });
+  const actionIcon = (path) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [name, value] of Object.entries({ class: 'action-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(name, value);
+    const mark = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    mark.setAttribute('d', path);
+    svg.append(mark);
+    return svg;
+  };
+  const cancelChoice = labelled.find(c => c.value === 'cancel');
+  const cancelText = cancelChoice.label.length <= 28 ? cancelChoice.label : 'Cancel';
+  const confirmLabel = el('span', { class: 'action-label' }, 'Confirm');
+  const confirm = el('button', { id: 'confirm', disabled: '' },
+    actionIcon('M20 6 9 17l-5-5'), confirmLabel);
+  const cancel = el('button', { id: 'cancel', class: 'cancel' },
+    actionIcon('M18 6 6 18 M6 6l12 12'),
+    el('span', { class: 'action-label' }, cancelText));
+  cancel.setAttribute('aria-label', cancelChoice.label);
+  const fallbackChoices = el('div', { class: 'fallback-choices', role: 'group', 'aria-label': 'Choose an option' });
   const extra = el('div', { class: 'extra' });
-  const bar = el('div', { class: 'confirmbar' }, summary, inline, confirm);
+  const bar = el('div', { class: 'confirmbar' },
+    el('div', { class: 'confirmbar-inner' },
+      el('div', { class: 'confirm-actions' }, cancel, confirm)));
   let unbound = null;
   let comment = null;
   let current = null;
@@ -1315,19 +1356,18 @@ function renderFull(ctx, chip, banner) {
     const fields = readDesign(frames, schema, state);
     if (unbound) Object.assign(fields, unbound.values());
     const answer = shapeAnswer(schema, state.choice, fields, comment && comment.value);
-    const choice = choices.find(c => c.value === state.choice);
-    const parts = [];
-    parts.push(choice ? 'You chose: ' + choice.label : (choices.length ? 'Choose an option.' : 'Fill in the form.'));
-    for (const f of schema.fields || []) {
-      const v = (answer.fields || {})[f.name];
-      if (v === undefined) continue;
-      const label = x => ((f.options || []).find(o => o.value === x) || {}).label || x;
-      parts.push(f.label + ': ' + (Array.isArray(v) ? v.map(label).join(', ') : v === true ? 'yes' : v === false ? 'no' : label(v)));
+    const choice = labelled.find(c => c.value === state.choice);
+    for (const b of fallbackChoices.children) {
+      const selected = b.dataset.value === state.choice;
+      b.classList.toggle('selected', selected);
+      b.setAttribute('aria-pressed', String(selected));
     }
-    summary.textContent = parts.join(' . ');
-    for (const b of inline.children) b.classList.toggle('selected', b.dataset.value === state.choice);
     const problem = answerProblem(schema, answer);
     confirm.disabled = problem !== null;
+    confirmLabel.textContent = choice && choice.value !== 'cancel' && choice.label.length <= 28
+      ? choice.label : 'Confirm';
+    confirm.setAttribute('aria-label', choice && choice.value !== 'cancel'
+      ? 'Confirm: ' + choice.label : 'Confirm');
     confirm.title = problem || '';
     current = { answer, label: choice ? choice.label : 'Submitted' };
   };
@@ -1351,8 +1391,12 @@ function renderFull(ctx, chip, banner) {
       extra.prepend(...form.nodes);
       for (const n of form.nodes) n.addEventListener('input', refresh), n.addEventListener('change', refresh);
     }
-    if (choices.length && !boundChoices && !inline.children.length) {
-      for (const c of choices) inline.append(el('button', { 'data-value': c.value, 'data-choice': c.value, onclick: () => choose(c.value) }, c.label));
+    if (choices.length && !boundChoices && !fallbackChoices.children.length) {
+      for (const c of choices.filter(c => c.value !== 'cancel')) fallbackChoices.append(el('button', {
+        type: 'button', 'data-value': c.value, 'data-choice': c.value,
+        'aria-pressed': 'false', onclick: () => choose(c.value),
+      }, c.label));
+      extra.prepend(fallbackChoices);
     }
     refresh();
   };
@@ -1371,8 +1415,13 @@ function renderFull(ctx, chip, banner) {
       .then(() => { document.body.classList.remove('full'); })
       .catch(fail);
   });
+  cancel.addEventListener('click', () => {
+    sign(ctx, shapeAnswer(schema, 'cancel', {}, null), cancelChoice.label)
+      .then(() => { document.body.classList.remove('full'); })
+      .catch(fail);
+  });
   setInterval(refresh, 700);  // controls changed without an event (autofill, restored state)
-  const top = el('div', { class: 'topbar' }, chip, manifest.title ? el('strong', { id: 'title' }, manifest.title) : '', banner, factsBox(ctx));
+  const top = requestHeader(ctx, chip, banner);
   show(top, ...content, extra, bar);
 }
 
@@ -1422,9 +1471,7 @@ async function sign(ctx, answer, label) {
   // An answer already signed in this tab and not yet delivered goes first, as it was signed: a
   // second, different record for the same request would only be refused.
   if (await resendUnsent(ctx.facts.request_id)) {
-    return show(el('h1', { id: 'done' }, 'Answer signed'),
-      el('p', {}, 'The answer you signed earlier, before the connection failed, has now been delivered.'),
-      await nextControls(ctx.req.recipient.id, ctx.req.request_id));
+    return showReceipt(ctx, null, null, true);
   }
   const record = await buildRecord(ctx, answer);
   if (!await submitWithSession(ctx, record)) {
@@ -1437,8 +1484,23 @@ async function sign(ctx, answer, label) {
     }});
     await deliver(ctx, { record, assertion: assertionJson(a) });
   }
-  show(el('h1', { id: 'done' }, 'Answer signed'), el('p', {}, 'You chose: ' + label + '.'),
-    await nextControls(ctx.req.recipient.id, ctx.req.request_id));
+  await showReceipt(ctx, answer, label);
+}
+
+async function showReceipt(ctx, answer, label, recovered = false) {
+  const next = await nextControls(ctx.req.recipient.id, ctx.req.request_id);
+  document.body.classList.remove('full');
+  show(el('section', { class: 'receipt-page', 'aria-labelledby': 'done' },
+    el('div', { class: 'receipt' },
+      receiptMark(),
+      el('h1', { id: 'done' }, recovered ? 'Decision delivered' : 'Decision recorded'),
+      el('p', { class: 'receipt-copy' }, recovered
+        ? 'Your earlier signed response has now been delivered.'
+        : 'Your response was signed and sent.'),
+      answer && answer.choice !== undefined
+        ? el('div', { class: 'receipt-choice' },
+          el('span', {}, 'Your response'), el('strong', {}, label)) : '',
+      next, closeControl())));
 }
 
 // ---------------------------------------------------------------- queue and inbox
@@ -1461,22 +1523,25 @@ const skippedIds = () => JSON.parse(sessionStorage.getItem('hitl.skipped') || '[
 async function nextControls(rid, currentId) {
   const box = el('div', { class: 'queue', id: 'queue' });
   const list = await inboxFetch(rid).catch(() => null);
-  if (!list) {
-    box.append(el('p', { class: 'note' }, 'You can close this page.'));
-    return box;
-  }
+  if (!list) return box;
   const pending = list.filter(r => r.request_id !== currentId);
   const ahead = pending.filter(r => !skippedIds().includes(r.request_id));
   if (ahead.length) {
     box.append(el('button', { id: 'next', onclick: () => { location.href = '/r/' + ahead[0].short + '?queue=1'; } },
-      'Next: ' + ahead[0].caller.display_name + ' (' + ahead.length + ' left)'));
+      el('span', { class: 'queue-next-copy' },
+        el('span', { class: 'queue-next-label' }, 'Next decision · ' + ahead.length + ' left'),
+        el('strong', {}, ahead[0].caller.display_name)),
+      el('span', { class: 'queue-arrow', 'aria-hidden': 'true' }, '›')));
   } else if (pending.length) {
     box.append(el('button', { id: 'back-to-skipped', onclick: () => {
       sessionStorage.removeItem('hitl.skipped');
       location.href = '/r/' + pending[0].short + '?queue=1';
-    } }, 'Back to skipped (' + pending.length + ')'));
+    } }, el('span', { class: 'queue-next-copy' },
+      el('span', { class: 'queue-next-label' }, pending.length + ' skipped'),
+      el('strong', {}, 'Return to skipped decisions')),
+    el('span', { class: 'queue-arrow', 'aria-hidden': 'true' }, '›')));
   } else {
-    box.append(el('p', { id: 'all-done' }, 'No more pending requests.'));
+    box.append(el('p', { id: 'all-done' }, 'You are all caught up.'));
   }
   if (pending.length) box.append(el('p', {}, el('a', { href: '/inbox', id: 'show-all' }, 'Show all pending requests')));
   return box;
